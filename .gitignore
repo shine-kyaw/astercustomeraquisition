@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+build
+.DS_Store
+
+# Secrets — never commit these. Set them in Vercel's dashboard instead.
+.env
+.env.local
+.env*.local
+
+*.pem
+npm-debug.log*
+yarn-error.log*
+.vercel
+next-env.d.ts
+tsconfig.tsbuildinfo
