@@ -31,6 +31,11 @@ export default function LeadList({ me }: { me: string }) {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showImport, setShowImport] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<any>(null)
+  const [importError, setImportError] = useState('')
 
   async function load() {
     try {
@@ -69,6 +74,55 @@ export default function LeadList({ me }: { me: string }) {
     } else if (showLog) {
       loadActivity()
     }
+  }
+
+  async function doImport() {
+    setImporting(true)
+    setImportError('')
+    setImportResult(null)
+    try {
+      const res = await fetch('/api/leads/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: importText }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setImportError(data.error ?? 'Import failed'); return }
+      setImportResult(data)
+      setImportText('')
+      load()
+    } catch {
+      setImportError('Network error — try again')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  function closeImport() {
+    setShowImport(false)
+    setImportResult(null)
+    setImportError('')
+  }
+
+  /**
+   * A dropped or chosen file just fills the textarea. Both routes then go through the same
+   * parse and the same import call, so there is only one behaviour to reason about — and
+   * you can still see and edit what you're about to send.
+   */
+  function readFile(file: File | undefined | null) {
+    if (!file) return
+    if (file.size > 2_000_000) {
+      setImportError('That file is larger than 2 MB — it is probably not a lead batch.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setImportText(String(reader.result ?? ''))
+      setImportError('')
+      setImportResult(null)
+    }
+    reader.onerror = () => setImportError('Could not read that file.')
+    reader.readAsText(file)
   }
 
   async function signOut() {
@@ -147,7 +201,8 @@ export default function LeadList({ me }: { me: string }) {
       {error && <div className="err" style={{ marginTop: 18 }}>{error}</div>}
 
       <div className="toolbar">
-        <Link className="btn p" href="/leads/new">+ Add lead</Link>
+        <button className="btn p" onClick={() => setShowImport(true)}>Import batch</button>
+        <Link className="btn" href="/leads/new">+ Add one lead</Link>
         <input
           type="text"
           placeholder="Search company, person, location, notes…"
@@ -242,6 +297,104 @@ export default function LeadList({ me }: { me: string }) {
             </div>
           )
         })
+      )}
+
+      {showImport && (
+        <div className="veil" onClick={(e) => { if (e.target === e.currentTarget) closeImport() }}>
+          <div className="modal">
+            <div className="mhead">
+              <h3>Import a batch</h3>
+              <button className="btn sm" onClick={closeImport}>Close</button>
+            </div>
+            <div className="mbody">
+              <p style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 12 }}>
+                Paste the JSON block Claude produced at the end of a lead batch &mdash; or drop a
+                <code style={{ color: 'var(--gold)' }}> .json</code> file onto the box below.
+                Companies already in the system are skipped automatically, so it is safe to import a
+                batch twice or one a colleague has already done. Nothing here overwrites an existing
+                lead&rsquo;s status.
+              </p>
+
+              <div style={{ display: 'flex', gap: 9, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+                <label className="btn sm" style={{ cursor: 'pointer', margin: 0 }}>
+                  Choose a file
+                  <input
+                    type="file"
+                    accept=".json,.txt,application/json,text/plain"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { readFile(e.target.files?.[0]); e.target.value = '' }}
+                  />
+                </label>
+                {importText && (
+                  <button className="btn sm" onClick={() => { setImportText(''); setImportResult(null); setImportError('') }}>
+                    Clear
+                  </button>
+                )}
+                <span style={{ fontSize: 12, color: 'var(--dim)' }}>
+                  {importText ? `${importText.length.toLocaleString()} characters ready` : 'nothing pasted yet'}
+                </span>
+              </div>
+
+              <textarea
+                rows={12}
+                value={importText}
+                placeholder={'Paste here, or drop a .json file.\n\n{\n  "batch": "Batch 002",\n  "leads": [ ... ]\n}'}
+                onChange={(e) => setImportText(e.target.value)}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--gold)' }}
+                onDragLeave={(e) => { e.currentTarget.style.borderColor = '' }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.style.borderColor = ''
+                  readFile(e.dataTransfer.files?.[0])
+                }}
+              />
+              {importError && <div className="err" style={{ marginTop: 12 }}>{importError}</div>}
+
+              {importResult && (
+                <div className="result">
+                  <h5>Result</h5>
+                  <div className="big grn">{importResult.created} added</div>
+                  {importResult.duplicates?.length > 0 && (
+                    <>
+                      <h5 style={{ marginTop: 14 }}>
+                        Skipped — already in the system ({importResult.duplicates.length})
+                      </h5>
+                      <ul>
+                        {importResult.duplicates.map((d: any, i: number) => (
+                          <li key={i}>
+                            · {d.company}
+                            {d.batch ? ` — already in ${d.batch}, status “${d.status}”` : ` — ${d.existing}`}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {importResult.rejected?.length > 0 && (
+                    <>
+                      <h5 style={{ marginTop: 14 }}>Rejected ({importResult.rejected.length})</h5>
+                      <ul>
+                        {importResult.rejected.map((r: any, i: number) => (
+                          <li key={i}>
+                            · {r.company ? `${r.company}: ` : `position ${r.index + 1}: `}
+                            {r.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="mfoot">
+              <button className="btn" onClick={closeImport}>
+                {importResult ? 'Done' : 'Cancel'}
+              </button>
+              <button className="btn p" onClick={doImport} disabled={importing || !importText.trim()}>
+                {importing ? 'Importing…' : 'Import'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <footer>

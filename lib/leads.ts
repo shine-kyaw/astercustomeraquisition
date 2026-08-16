@@ -61,6 +61,55 @@ export function sanitize(body: unknown): { patch: Partial<Record<WritableField, 
   return { patch, errors }
 }
 
+/**
+ * Normalise a website into a comparison key: strip protocol, `www.`, path and trailing
+ * slash. `https://www.Example.com/about` and `example.com` are the same business.
+ */
+export function siteKey(site: unknown): string {
+  return String(site ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .split(/[/?#]/)[0]
+    .replace(/\.$/, '')
+}
+
+/**
+ * Normalise a company name: lowercase, drop legal suffixes and punctuation, collapse
+ * whitespace. "KeyChoc Ltd." and "Keychoc Limited" should not both enter the pipeline.
+ */
+export function companyKey(name: unknown): string {
+  return String(name ?? '')
+    .toLowerCase()
+    .replace(/\b(ltd|limited|inc|incorporated|llc|llp|plc|corp|corporation|co|company|gmbh|pty|pte|bv|nv|sa|ag|kk)\b/g, '')
+    .replace(/[^a-z0-9]+/g, '')
+    .trim()
+}
+
+/**
+ * Find an existing lead that looks like the same business. Domain match is the strong
+ * signal; name match catches the case where someone recorded a different URL for it.
+ * Returns null when nothing matches.
+ */
+export async function findDuplicate(
+  company: unknown,
+  site: unknown
+): Promise<{ id: string; company: string; batch: string; status: string } | null> {
+  const sk = siteKey(site)
+  const ck = companyKey(company)
+  if (!sk && !ck) return null
+
+  const rows = await q<{ id: string; company: string; batch: string; status: string; site: string }>(
+    'select id, company, batch, status, site from leads'
+  )
+  for (const row of rows) {
+    if (sk && siteKey(row.site) === sk) return row
+    if (ck && companyKey(row.company) === ck) return row
+  }
+  return null
+}
+
 export async function listLeads(): Promise<Lead[]> {
   return q<Lead>(
     `select * from leads

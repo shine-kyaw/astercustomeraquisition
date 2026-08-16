@@ -2,14 +2,15 @@
   "name": "aster-lead-engine",
   "version": "1.0.0",
   "private": true,
-  "description": "Aster's shared lead engine — prospect tracking for the team, writable by Claude.",
+  "description": "Aster's shared lead engine \u2014 prospect tracking for the team, writable by Claude.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "db:setup": "node scripts/setup.mjs",
-    "db:seed": "node scripts/seed.mjs"
+    "db:seed": "node scripts/seed.mjs",
+    "push-batch": "node --env-file=.env.local scripts/push-batch.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
