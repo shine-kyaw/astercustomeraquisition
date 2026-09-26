@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { TEAM, STATUSES } from '@/lib/constants'
+import { formatExclusionList } from '@/lib/exclusion-list'
 
 type Lead = Record<string, any>
 type Activity = { id: number; who: string; action: string; at: string }
@@ -36,6 +37,10 @@ export default function LeadList({ me }: { me: string }) {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<any>(null)
   const [importError, setImportError] = useState('')
+  const [copied, setCopied] = useState<number | null>(null)
+  const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  useEffect(() => () => clearTimeout(copiedTimer.current), [])
 
   async function load() {
     try {
@@ -125,6 +130,46 @@ export default function LeadList({ me }: { me: string }) {
     reader.readAsText(file)
   }
 
+  /**
+   * Built from the leads already loaded — no API call, so it reflects exactly what this
+   * screen shows. The whole list, not the filtered view: a filter that hides a company
+   * must not hide it from the exclusion list too.
+   */
+  async function copyExclusionList() {
+    const text = formatExclusionList(leads)
+    // The header's count, not leads.length — merged aliases and skipped blanks make them differ.
+    const n = Number(/\((\d+) compan/.exec(text)?.[1] ?? 0)
+
+    let ok = false
+    // navigator.clipboard is missing on insecure origins and can be refused by permissions
+    // policy, so fall back to the old textarea-and-execCommand route before giving up.
+    try {
+      await navigator.clipboard.writeText(text)
+      ok = true
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.setAttribute('readonly', '')
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      try { ok = document.execCommand('copy') } catch { ok = false }
+      ta.remove()
+    }
+
+    if (!ok) {
+      // Don't let the list vanish: it is in the console for anyone who can copy from there.
+      console.log(text)
+      setError('Could not copy to the clipboard. The exclusion list has been printed to the browser console instead.')
+      return
+    }
+    setError('')
+    setCopied(n)
+    clearTimeout(copiedTimer.current)
+    copiedTimer.current = setTimeout(() => setCopied(null), 2500)
+  }
+
   async function signOut() {
     await fetch('/api/session', { method: 'DELETE' })
     router.push('/login')
@@ -209,6 +254,14 @@ export default function LeadList({ me }: { me: string }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <button
+          className="btn sm"
+          onClick={copyExclusionList}
+          disabled={!leads.length}
+          title="Copies every company already in the system. Paste it into a new research batch so nobody spends time on a company we already have."
+        >
+          {copied !== null ? `Copied — ${copied} ${copied === 1 ? 'company' : 'companies'}` : 'Copy exclusion list'}
+        </button>
         <button className="btn sm" onClick={() => { setShowLog(!showLog); if (!showLog) loadActivity() }}>
           {showLog ? 'Hide activity' : 'Activity log'}
         </button>
