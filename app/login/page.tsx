@@ -2,17 +2,25 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { TEAM } from '@/lib/constants'
+import { TEAM, cleanName, signInNameError } from '@/lib/constants'
+
+// Not a possible typed name (it fails the "<>" check), so it can't collide with one.
+const OTHER = '<other>'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [name, setName] = useState<string>(TEAM[0].name)
+  const [choice, setChoice] = useState<string>(TEAM[0].name)
+  const [otherName, setOtherName] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    const name = choice === OTHER ? cleanName(otherName) : choice
+    // Same check the server makes, run here first so a typo doesn't cost a round trip.
+    const nameError = signInNameError(name)
+    if (nameError) { setError(nameError); return }
     setBusy(true)
     setError('')
     try {
@@ -47,14 +55,32 @@ export default function LoginPage() {
 
         <div className="f">
           <label htmlFor="name">You are</label>
-          <select id="name" value={name} onChange={(e) => setName(e.target.value)}>
+          <select id="name" value={choice} onChange={(e) => { setChoice(e.target.value); setError('') }}>
             {TEAM.map((t) => (
               <option key={t.name} value={t.name}>
                 {t.name}
               </option>
             ))}
+            <option value={OTHER}>Other</option>
           </select>
         </div>
+
+        {choice === OTHER && (
+          <div className="f">
+            <label htmlFor="other-name">Your name</label>
+            <input
+              id="other-name"
+              type="text"
+              value={otherName}
+              onChange={(e) => { setOtherName(e.target.value); setError('') }}
+              autoComplete="name"
+              maxLength={60}
+              autoFocus
+              required
+            />
+            <span className="hint">Not on the list? Type your name so your edits are attributed to you.</span>
+          </div>
+        )}
 
         <div className="f">
           <label htmlFor="password">Team password</label>

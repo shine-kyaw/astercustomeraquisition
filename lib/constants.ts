@@ -9,6 +9,34 @@ export const TEAM = [
 
 export const TEAM_NAMES = TEAM.map((t) => t.name) as readonly string[]
 
+const MAX_NAME = 60
+
+/** Collapse whitespace so "Aung  Ko " and "Aung Ko" sign in as the same person. */
+export function cleanName(raw: unknown): string {
+  return String(raw ?? '').replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Why a sign-in name is unacceptable, or null if it's fine. Shared by the login form,
+ * the session route and cookie decoding so all three agree on who can be signed in.
+ *
+ * Anyone not on TEAM can sign in under "Other" with a typed name — they still need the
+ * team password; the name only exists so their edits are attributed to someone. A typed
+ * name that matches a roster name (in any case) is refused, so the activity log never
+ * shows two spellings of the same teammate.
+ */
+export function signInNameError(name: string): string | null {
+  if (TEAM_NAMES.includes(name)) return null
+  if (name !== cleanName(name)) return 'Enter your name'
+  if (name.length < 2) return 'Enter your name'
+  if (name.length > MAX_NAME) return `Keep your name under ${MAX_NAME} characters`
+  if (/[\u0000-\u001f\u007f<>]/.test(name)) return 'That name has characters we can’t use'
+  if (TEAM_NAMES.some((t) => t.toLowerCase() === name.toLowerCase())) {
+    return 'That’s a team name — pick it from the list instead'
+  }
+  return null
+}
+
 export const STATUSES = [
   'Not sent', 'Emailed', 'Called', 'Follow-up 1', 'Follow-up 2',
   'Replied', 'Meeting booked', 'Won', 'No fit', 'Dead',

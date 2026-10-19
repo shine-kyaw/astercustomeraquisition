@@ -1,5 +1,5 @@
 import { checkTeamPassword, startSession, endSession, getSession } from '@/lib/auth'
-import { TEAM_NAMES } from '@/lib/constants'
+import { TEAM_NAMES, cleanName, signInNameError } from '@/lib/constants'
 import { logActivity } from '@/lib/leads'
 import { ok, fail, guard } from '@/lib/http'
 
@@ -15,14 +15,16 @@ export async function GET() {
 export async function POST(req: Request) {
   return guard(async () => {
     const body = (await req.json().catch(() => ({}))) as { password?: string; name?: string }
-    const name = String(body.name ?? '')
+    const name = cleanName(body.name)
     const password = String(body.password ?? '')
 
-    if (!TEAM_NAMES.includes(name)) return fail('Pick your name from the list', 400)
+    const nameError = signInNameError(name)
+    if (nameError) return fail(nameError, 400)
     if (!checkTeamPassword(password)) return fail('That password is not right', 401)
 
     await startSession(name)
-    await logActivity(null, name, 'signed in')
+    // Flag "Other" sign-ins so the log shows who isn't on the roster.
+    await logActivity(null, name, TEAM_NAMES.includes(name) ? 'signed in' : 'signed in (not on the team list)')
     return ok({ signedIn: true, name })
   })
 }

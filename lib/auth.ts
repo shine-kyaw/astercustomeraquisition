@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual, randomUUID } from 'node:crypto'
 import { cookies } from 'next/headers'
-import { TEAM_NAMES } from './constants'
+import { signInNameError } from './constants'
 
 const COOKIE = 'aster_session'
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 14 // two weeks
@@ -50,9 +50,9 @@ function decode(raw: string | undefined): Session | null {
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Session
     if (!session?.name || typeof session.exp !== 'number') return null
     if (session.exp < Date.now()) return null
-    // Only names on the roster are valid, so a forged-but-unsigned name can't slip through
-    // even if SESSION_SECRET were ever rotated carelessly.
-    if (!TEAM_NAMES.includes(session.name)) return null
+    // Only names sign-in would accept are valid — roster names, or a well-formed "Other"
+    // name — so a cookie can't carry a name the login form would have refused.
+    if (signInNameError(session.name)) return null
     return session
   } catch {
     return null
