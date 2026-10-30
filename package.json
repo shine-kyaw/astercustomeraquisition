@@ -2,7 +2,7 @@
   "name": "aster-lead-engine",
   "version": "1.0.0",
   "private": true,
-  "description": "Aster's shared lead engine \u2014 prospect tracking for the team, writable by Claude.",
+  "description": "Aster's shared lead engine — prospect tracking for the team, writable by Claude.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -19,6 +19,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.13",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",

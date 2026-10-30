@@ -15,3 +15,7 @@ yarn-error.log*
 .vercel
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# Local database backups and the throwaway test database
+backups
+.localdb

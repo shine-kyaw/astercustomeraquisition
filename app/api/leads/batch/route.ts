@@ -35,7 +35,9 @@ export async function POST(req: Request) {
       return fail(`A batch is capped at ${MAX_LEADS_PER_BATCH} leads`, 413)
     }
 
-    const result = await ingestBatch(body.leads, { batch: body.batch, addedBy: body.addedBy })
+    const dryRun = new URL(req.url).searchParams.get('dryRun') === '1'
+    const result = await ingestBatch(body.leads, { batch: body.batch, addedBy: body.addedBy, dryRun })
+    if (dryRun) return ok(result, 200)
     const partial = result.rejected.length > 0 || result.duplicates.length > 0
     return ok(result, partial ? 207 : 201)
   })

@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: Request) {
   return guard(async () => {
     const session = await requireSession()
-    const body = (await req.json().catch(() => null)) as { text?: string } | null
+    const body = (await req.json().catch(() => null)) as { text?: string; dryRun?: boolean } | null
 
     const parsed = parsePastedBatch(body?.text ?? '')
     if (!parsed.ok) return fail(parsed.error, 400)
@@ -24,6 +24,8 @@ export async function POST(req: Request) {
       batch: parsed.batch,
       // Whoever pasted it owns it, regardless of what the payload claims.
       addedBy: session.name,
+      // "Check first": run every rule, write nothing.
+      dryRun: body?.dryRun === true,
     })
 
     return ok(result, 200)

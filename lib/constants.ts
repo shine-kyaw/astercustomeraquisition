@@ -1,3 +1,7 @@
+import {
+  PRIORITIES, CURRENCIES, PACKAGES, MOCKUP_STATUSES, PROPOSAL_STATUSES, DEPOSIT_STATUSES,
+} from './crm'
+
 export const TEAM = [
   { name: 'Shine Kyaw', mail: 'shine@astermade.com', live: true },
   { name: 'Myat Thit Kha', mail: 'mtk@astermade.com', live: true },
@@ -93,9 +97,23 @@ export const WRITABLE_FIELDS = [
   'why', 'good', 'prob', 'signals', 'recent', 'angle',
   'owner', 'sender', 'tmpl', 'subj', 'mail', 'script', 'note',
   'status', 'date_sent', 'reply',
+  // CRM fields (migration 001). Stage, lost reason and do-not-contact are not here on
+  // purpose: they change only through events, so every move is recorded with a reason.
+  'priority', 'deal_value', 'currency', 'package', 'expected_close', 'next_step', 'source',
+  'researched_on', 'verified_on',
+  'mockup_status', 'mockup_url', 'mockup_due',
+  'proposal_status', 'proposal_url', 'proposal_amount', 'proposal_sent_on', 'proposal_version',
+  'deposit_status', 'project_owner', 'deadline', 'handoff_notes',
 ] as const
 
 export type WritableField = (typeof WRITABLE_FIELDS)[number]
+
+/** Integer columns, and decimal money columns. Blank means "not set". */
+export const INT_FIELDS: readonly WritableField[] = ['opp', 'buy', 'seq', 'proposal_version']
+export const MONEY_FIELDS: readonly WritableField[] = ['deal_value', 'proposal_amount']
+export const DATE_FIELDS: readonly WritableField[] = [
+  'date_sent', 'expected_close', 'researched_on', 'verified_on', 'mockup_due', 'proposal_sent_on', 'deadline',
+]
 
 /** Values we constrain, so a typo or a bad payload can't put junk in a filter column. */
 export const ENUMS: Partial<Record<WritableField, readonly string[]>> = {
@@ -105,4 +123,10 @@ export const ENUMS: Partial<Record<WritableField, readonly string[]>> = {
   conf: CONFIDENCE,
   channel: CHANNELS,
   geo: GEOS.map((g) => g.k),
+  priority: PRIORITIES,
+  currency: CURRENCIES,
+  package: PACKAGES.filter(Boolean),
+  mockup_status: MOCKUP_STATUSES.filter(Boolean),
+  proposal_status: PROPOSAL_STATUSES.filter(Boolean),
+  deposit_status: DEPOSIT_STATUSES.filter(Boolean),
 }

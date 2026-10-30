@@ -4,9 +4,11 @@ export const MAX_LEADS_PER_BATCH = 50
 
 export type IngestResult = {
   created: number
-  duplicates: { index: number; company: string; existing: string; batch: string; status: string }[]
+  duplicates: { index: number; company: string; existing: string; batch: string; status: string; kind?: string }[]
   rejected: { index: number; company?: string; reason: string }[]
   leads: unknown[]
+  dryRun?: boolean
+  wouldCreate?: { index: number; company: string; status: string; owner: string }[]
 }
 
 /**
@@ -14,16 +16,21 @@ export type IngestResult = {
  *
  * Shared by the token-authenticated API endpoint and the in-app paste importer, so both
  * apply exactly the same validation and duplicate rules. Insert-only by design: an
- * incoming batch can add leads but never overwrite a status a human has already set.
+ * incoming batch can add leads but never overwrite a status, owner, stage, deal, task or
+ * timeline that already exists. A company already ruled out is skipped like a duplicate.
+ *
+ * `dryRun` runs every check and reports what would happen, writing nothing — the import
+ * preview.
  */
 export async function ingestBatch(
   leads: unknown[],
-  opts: { batch?: string; addedBy?: string }
+  opts: { batch?: string; addedBy?: string; dryRun?: boolean }
 ): Promise<IngestResult> {
   const batch = String(opts.batch ?? '').trim()
   const addedBy = String(opts.addedBy ?? 'Claude').slice(0, 120)
 
   const created: unknown[] = []
+  const wouldCreate: NonNullable<IngestResult['wouldCreate']> = []
   const duplicates: IngestResult['duplicates'] = []
   const rejected: IngestResult['rejected'] = []
 
@@ -58,20 +65,29 @@ export async function ingestBatch(
     if (existing) {
       duplicates.push({
         index: i, company,
-        existing: existing.company, batch: existing.batch, status: existing.status,
+        existing: existing.company, batch: existing.batch, status: existing.status, kind: existing.kind,
       })
       continue
     }
 
     if (key) seen.set(key, i)
     if (batch) patch.batch = batch
-    if (patch.seq == null) patch.seq = created.length + 1
+    if (patch.seq == null) patch.seq = created.length + wouldCreate.length + 1
+
+    if (opts.dryRun) {
+      wouldCreate.push({ index: i, company, status: String(patch.status || 'Not sent'), owner: String(patch.owner ?? '') })
+      continue
+    }
 
     try {
-      created.push(await createLead(patch, addedBy))
+      created.push(await createLead(patch, addedBy, { via: 'import', batch }))
     } catch (e) {
       rejected.push({ index: i, company, reason: (e as Error).message })
     }
+  }
+
+  if (opts.dryRun) {
+    return { created: 0, duplicates, rejected, leads: [], dryRun: true, wouldCreate }
   }
 
   await logActivity(
