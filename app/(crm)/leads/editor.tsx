@@ -4,13 +4,18 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  TEAM, STATUSES, GEOS, VERIFICATION, CONFIDENCE, CHANNELS, TEMPLATES, FORMER_NAMES, FORMER_MAILS,
+  TEAM, GEOS, VERIFICATION, CONFIDENCE, CHANNELS, TEMPLATES, FORMER_NAMES, FORMER_MAILS,
 } from '@/lib/constants'
+import { PRIORITIES, CURRENCIES, PACKAGES } from '@/lib/crm'
+import { api, ApiError } from '@/app/components/api'
+import { useToast } from '@/app/components/ui'
+import { useMe } from '@/app/components/shell'
+import { Icon } from '@/app/components/icons'
 
 type Field = {
   k: string
   label: string
-  type?: 'text' | 'area' | 'select'
+  type?: 'text' | 'area' | 'select' | 'date'
   opts?: readonly string[]
   rows?: number
   wide?: boolean
@@ -27,6 +32,7 @@ const SECTIONS: { title: string; fields: Field[] }[] = [
       { k: 'loc', label: 'Location' },
       { k: 'site', label: 'Website URL' },
       { k: 'geo', label: 'Geography', type: 'select', opts: GEOS.map((g) => g.k) },
+      { k: 'source', label: 'Source' },
       { k: 'biz', label: 'What the business does', type: 'area', rows: 3, wide: true },
     ],
   },
@@ -40,7 +46,18 @@ const SECTIONS: { title: string; fields: Field[] }[] = [
       { k: 'phone', label: 'Phone' },
       { k: 'pstat', label: 'Phone status', type: 'select', opts: VERIFICATION },
       { k: 'channel', label: 'First channel', type: 'select', opts: CHANNELS },
-      { k: 'note', label: 'Contact note / caveat' },
+      { k: 'note', label: 'Notes / caveats', type: 'area', rows: 2, wide: true },
+    ],
+  },
+  {
+    title: 'Deal',
+    fields: [
+      { k: 'priority', label: 'Priority', type: 'select', opts: PRIORITIES },
+      { k: 'deal_value', label: 'Deal value' },
+      { k: 'currency', label: 'Currency', type: 'select', opts: CURRENCIES },
+      { k: 'package', label: 'Package', type: 'select', opts: PACKAGES },
+      { k: 'expected_close', label: 'Expected close', type: 'date' },
+      { k: 'next_step', label: 'Next step', wide: true },
     ],
   },
   {
@@ -55,21 +72,21 @@ const SECTIONS: { title: string; fields: Field[] }[] = [
   {
     title: 'Research',
     fields: [
+      { k: 'researched_on', label: 'Researched on', type: 'date' },
+      { k: 'verified_on', label: 'Last verified on', type: 'date' },
       { k: 'why', label: 'Why Aster should contact them', type: 'area', rows: 3, wide: true },
       { k: 'good', label: 'Positive observation', type: 'area', rows: 3, wide: true },
       { k: 'prob', label: 'Website opportunity — the observable problem', type: 'area', rows: 4, wide: true },
       { k: 'recent', label: 'Recent context', type: 'area', rows: 2, wide: true },
-      { k: 'angle', label: 'Personalized angle', type: 'area', rows: 3, wide: true },
+      { k: 'angle', label: 'Personalised angle', type: 'area', rows: 3, wide: true },
     ],
   },
   {
     title: 'Outreach',
     fields: [
       { k: 'owner', label: 'Owner', type: 'select', opts: ['', ...TEAM.map((t) => t.name)] },
-      { k: 'sender', label: 'Send from', type: 'select', opts: ['', ...TEAM.map((t) => t.mail)] },
+      { k: 'sender', label: 'Send from', type: 'select', opts: ['', ...TEAM.filter((t) => t.live).map((t) => t.mail)] },
       { k: 'tmpl', label: 'Template', type: 'select', opts: ['', ...TEMPLATES] },
-      { k: 'status', label: 'Status', type: 'select', opts: STATUSES },
-      { k: 'date_sent', label: 'Date contacted (YYYY-MM-DD)' },
       { k: 'subj', label: 'Subject line', wide: true, hint: 'Aim under ~35 characters' },
       { k: 'mail', label: 'Email body', type: 'area', rows: 12, wide: true },
       { k: 'script', label: 'Phone script', type: 'area', rows: 6, wide: true },
@@ -91,94 +108,112 @@ function optionLabel(o: string): string {
   return FORMER_NAMES.includes(o) || FORMER_MAILS.includes(o) ? `${o} (left)` : o
 }
 
+const DATES = ['expected_close', 'researched_on', 'verified_on']
+
 const BLANK: Record<string, string> = {
-  company: '', batch: 'Batch 002', seq: '', loc: '', geo: 'us', site: '', biz: '',
+  company: '', batch: 'Batch 002', seq: '', loc: '', geo: 'us', site: '', source: '', biz: '',
   who: '', role: '', email: '', estat: 'UNKNOWN', phone: '', pstat: 'UNKNOWN', channel: 'email',
+  priority: 'normal', deal_value: '', currency: 'USD', package: '', expected_close: '', next_step: '',
   opp: '3', buy: '0', conf: 'MEDIUM', why: '', good: '', prob: '', signals: '', recent: '', angle: '',
-  owner: '', sender: '', tmpl: '', status: 'Not sent', date_sent: '', subj: '', mail: '', script: '', note: '',
+  researched_on: '', verified_on: '',
+  owner: '', sender: '', tmpl: '', subj: '', mail: '', script: '', note: '',
 }
 
 export default function Editor({ id, me }: { id: string; me: string }) {
   const router = useRouter()
+  const toast = useToast()
+  const { role } = useMe()
   const isNew = id === 'new'
-  const [form, setForm] = useState<Record<string, string>>(BLANK)
+  const [form, setForm] = useState<Record<string, string>>(
+    isNew && TEAM.some((t) => t.name === me) ? { ...BLANK, owner: me } : BLANK
+  )
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState('')
-  const [armed, setArmed] = useState(false)
 
   useEffect(() => {
     if (isNew) return
+    let live = true
     ;(async () => {
-      const res = await fetch(`/api/leads/${id}`)
-      if (res.status === 401) { router.push('/login'); return }
-      const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Could not load that lead'); setLoading(false); return }
-      const next: Record<string, string> = { ...BLANK }
-      for (const k of Object.keys(BLANK)) {
-        const v = data.lead[k]
-        next[k] = v === null || v === undefined ? '' : String(v)
+      try {
+        const data = await api<{ lead: Record<string, unknown> }>(`/api/leads/${id}`)
+        if (!live) return
+        const next: Record<string, string> = { ...BLANK }
+        for (const k of Object.keys(BLANK)) {
+          const v = data.lead[k]
+          next[k] = v === null || v === undefined ? '' : String(v)
+          // Postgres hands back a full timestamp for a date column; the input wants YYYY-MM-DD.
+          if (DATES.includes(k)) next[k] = next[k].slice(0, 10)
+        }
+        setForm(next)
+      } catch (e) {
+        if (live) setError((e as Error).message)
       }
-      // Postgres hands back a full timestamp for a date column; the input wants YYYY-MM-DD.
-      if (next.date_sent) next.date_sent = next.date_sent.slice(0, 10)
-      setForm(next)
-      setLoading(false)
+      if (live) setLoading(false)
     })()
-  }, [id, isNew, router])
+    return () => { live = false }
+  }, [id, isNew])
 
   function set(k: string, v: string) {
     setForm((f) => ({ ...f, [k]: v }))
-    setSaved('')
   }
 
   async function save() {
     if (!form.company.trim()) { setError('A lead needs a company name'); return }
     setSaving(true); setError('')
-    const res = await fetch(isNew ? '/api/leads' : `/api/leads/${id}`, {
-      method: isNew ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    const data = await res.json().catch(() => ({}))
-    setSaving(false)
-    if (!res.ok) {
-      setError(data.errors ? `${data.error}: ${data.errors.join('; ')}` : data.error ?? 'Could not save')
-      return
+    try {
+      // A new lead starts as "Not sent", which the API defaults to; saying so keeps it explicit.
+      const body = isNew ? { ...form, status: 'Not sent' } : form
+      const data = await api<{ lead: { id: string } }>(isNew ? '/api/leads' : `/api/leads/${id}`, {
+        method: isNew ? 'POST' : 'PATCH', body,
+      })
+      toast(isNew ? 'Lead created' : 'Saved')
+      router.push(`/leads/${isNew ? data.lead.id : id}`)
+      router.refresh()
+    } catch (e) {
+      setError((e as Error).message)
+      setSaving(false)
     }
-    if (isNew) { router.push(`/leads/${data.lead.id}`); router.refresh() }
-    else setSaved(`Saved at ${new Date().toLocaleTimeString()}`)
   }
 
   async function remove() {
-    if (!armed) { setArmed(true); setTimeout(() => setArmed(false), 4000); return }
-    const res = await fetch(`/api/leads/${id}`, { method: 'DELETE' })
-    if (res.ok) { router.push('/'); router.refresh() }
-    else setError('Could not delete that lead')
+    try {
+      await api(`/api/leads/${id}`, { method: 'DELETE' })
+      toast('Lead deleted. An admin can restore it.')
+      router.push('/leads')
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 403 ? 'Only an owner or admin can delete leads.' : (e as Error).message)
+    }
   }
 
-  if (loading) return <div className="wrap"><div className="empty">Loading…</div></div>
+  const back = isNew ? '/leads' : `/leads/${id}`
+  const canDelete = role === 'owner' || role === 'admin'
+
+  if (loading) {
+    return (
+      <div className="page">
+        <div className="phead"><div><div className="skel" style={{ width: 260, height: 26 }} /></div></div>
+        <div className="card stack"><div className="skel" /><div className="skel" style={{ width: '70%' }} /><div className="skel" style={{ width: '50%' }} /></div>
+      </div>
+    )
+  }
 
   return (
-    <div className="wrap">
-      <div className="topline">
+    <div className="page">
+      <div className="phead">
         <div>
-          <div className="brand">
-            <div className="mark">Aster<span>.</span></div>
-            <div className="tag">{isNew ? 'New lead' : 'Edit lead'}</div>
-          </div>
-          <p className="sub">{isNew ? 'Add a prospect to the shared list.' : form.company}</p>
-        </div>
-        <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
-          <span style={{ fontSize: 12.5, color: 'var(--violet)', fontWeight: 600 }}>{me}</span>
-          <Link className="btn sm" href="/">Back to list</Link>
+          <Link className="muted" href={back} style={{ fontSize: 12.5, display: 'inline-flex', gap: 5, alignItems: 'center', marginBottom: 6 }}>
+            <Icon name="back" /> {isNew ? 'Back to leads' : 'Back to lead'}
+          </Link>
+          <h1>{isNew ? 'New lead' : `Edit all fields${form.company ? ` · ${form.company}` : ''}`}</h1>
+          <p>{isNew ? 'Add a prospect to the shared list.' : 'Stage and outreach history change through logged activity, not here.'}</p>
         </div>
       </div>
 
-      {error && <div className="err" style={{ marginTop: 18 }}>{error}</div>}
-      {saved && <div className="note" style={{ borderLeftColor: 'var(--green)' }}>{saved}</div>}
+      {error && <div className="err" role="alert">{error}</div>}
 
-      <div className="card" style={{ marginTop: 18 }}>
+      <div className="card">
         <div className="fgrid">
           {SECTIONS.map((section) => (
             <div key={section.title} style={{ display: 'contents' }}>
@@ -194,6 +229,8 @@ export default function Editor({ id, me }: { id: string; me: string }) {
                     </select>
                   ) : f.type === 'area' ? (
                     <textarea id={f.k} rows={f.rows ?? 3} value={form[f.k] ?? ''} onChange={(e) => set(f.k, e.target.value)} />
+                  ) : f.type === 'date' ? (
+                    <input id={f.k} type="date" value={form[f.k] ?? ''} onChange={(e) => set(f.k, e.target.value)} />
                   ) : (
                     <input id={f.k} type="text" value={form[f.k] ?? ''} onChange={(e) => set(f.k, e.target.value)} />
                   )}
@@ -204,36 +241,32 @@ export default function Editor({ id, me }: { id: string; me: string }) {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 9, marginTop: 24, flexWrap: 'wrap' }}>
+        <div className="row wrap" style={{ marginTop: 24 }}>
           <button className="btn p" onClick={save} disabled={saving}>
             {saving ? 'Saving…' : isNew ? 'Create lead' : 'Save changes'}
           </button>
-          <Link className="btn" href="/">Cancel</Link>
-          {!isNew && (
-            <button className="btn d" onClick={remove} style={{ marginLeft: 'auto' }}>
-              {armed ? 'Click again to confirm' : 'Delete lead'}
-            </button>
+          <Link className="btn" href={back}>Cancel</Link>
+          {!isNew && canDelete && (
+            <span style={{ marginLeft: 'auto' }}>
+              <ConfirmDelete onConfirm={remove} />
+            </span>
           )}
         </div>
       </div>
-
-      {!isNew && (form.mail || form.script) && (
-        <div className="card">
-          <h4>Ready to send</h4>
-          {form.mail && (
-            <div className="mail">
-              <div className="subj">Subject: {form.subj}</div>
-              <pre>{form.mail}</pre>
-            </div>
-          )}
-          {form.script && (
-            <>
-              <h4 style={{ marginTop: 18 }}>Phone script</h4>
-              <div className="script">{form.script}</div>
-            </>
-          )}
-        </div>
-      )}
     </div>
+  )
+}
+
+function ConfirmDelete({ onConfirm }: { onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return
+    const t = setTimeout(() => setArmed(false), 4000)
+    return () => clearTimeout(t)
+  }, [armed])
+  return (
+    <button className="btn d" onClick={() => (armed ? onConfirm() : setArmed(true))}>
+      {armed ? 'Click again to confirm' : 'Delete lead'}
+    </button>
   )
 }

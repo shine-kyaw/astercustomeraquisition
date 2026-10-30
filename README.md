@@ -1,8 +1,8 @@
-# Aster Lead Engine
+# Aster CRM
 
-Shared prospect tracker for the Aster team. Next.js on Vercel, Neon Postgres, no ORM, four dependencies.
+Aster's sales pipeline, from researched prospect to won client (formerly the Lead Engine). Next.js on Vercel, Neon Postgres, no ORM, four runtime dependencies.
 
-Everyone on the team edits the same list and sees the same data. Every change is attributed and logged. Claude can write researched batches straight in over an authenticated endpoint.
+Everyone on the team works the same pipeline. Every action is dated, attributed and kept. Claude can write researched batches straight in over an authenticated endpoint. Architecture and roadmap: [docs/CRM.md](docs/CRM.md). Releasing a database change: [DEPLOY.md](DEPLOY.md).
 
 ---
 
@@ -51,6 +51,7 @@ npm install
 cp .env.example .env.local     # paste your real values in
 npm run db:setup               # creates the tables
 npm run db:seed                # loads the six Batch 001 leads
+npm run db:migrate -- --apply  # applies db/migrations (backs up first)
 ```
 
 Open your Vercel URL, pick your name, enter the team password.
@@ -59,12 +60,12 @@ Open your Vercel URL, pick your name, enter the team password.
 
 ## How the team uses it
 
-- **The list** shows every lead grouped by batch, with status and owner editable inline. Changes save immediately.
-- **Open a lead** for the full research brief, the email as written, and the phone script — all editable.
-- **Add lead** for anything found outside a batch.
-- **Activity log** shows who changed what and when.
-
-Filters cover not-contacted, in-play, won, assigned-to-me, email-first, phone-first, and geography. The US counter on the dashboard is there because a standard batch should land at least four US leads.
+- **Today** answers "what needs me today?": replies waiting, overdue and due follow-ups, meetings, proposals awaiting a decision, and active deals with no next step.
+- **Leads** is every company, searchable and filterable, with saved views (mine, no next step, overdue, research older than 14 days, needs a new owner). Import batches here, with a "check first" preview.
+- **Pipeline** is the board: New → Outreach → Engaged → Meeting → Mockup → Proposal → Won / Closed.
+- **A lead's page** shows the next action and contact details first, then the timeline, the email and script as written, the research, tasks, and deal details.
+- **Log activity** records what actually happened (email sent, call, reply, meeting, proposal, won). Logging a send schedules the skill's cadence: a call on day 1 and one follow-up on day 3. A reply, meeting or close cancels what no longer applies. A draft never counts as a send.
+- **Tasks**, **Activity**, **Reports** and **Ruled out** (companies researched and rejected, which stay off every future batch) do what they say. Ctrl+K searches everything.
 
 ---
 
@@ -124,7 +125,7 @@ Cap is 50 leads per call.
 
 Worth understanding before you widen access.
 
-**One shared password, six named people.** Anyone with the password can sign in as any name on the roster. That is proportionate for a six-person internal tool holding public business contact data, and it means no user management to maintain. It is *not* appropriate if this ever holds customer data or if the team grows past people who all know each other — at that point, move to real accounts.
+**One shared password, named people.** Anyone with the password can sign in as any name on the roster, so the server-side role checks (delete, restore, settings, reconsidering a ruled-out company, lifting do-not-contact) stop mistakes, not a determined insider. Now that the app holds deal values and client conversations, individual Google sign-in is the next priority (docs/CRM.md). Until then, rotate `TEAM_PASSWORD` whenever someone leaves. People who have left can't sign in under their own name.
 
 **Sessions** are HMAC-signed cookies: httpOnly, sameSite lax, secure in production, two-week expiry. The name in a session is checked against the roster on every request, so a tampered cookie fails even before the signature check would catch it.
 
@@ -134,7 +135,11 @@ Worth understanding before you widen access.
 
 **The ingest token is separate from the team password** on purpose. Rotating it doesn't sign anyone out, and a leaked team password can't be used to inject leads.
 
-**No rate limiting.** For a private internal URL that's an acceptable gap, but if the URL gets shared around, put Vercel's WAF or a rate limiter in front of `/api/session` — otherwise the shared password is brute-forceable given enough time.
+**Sign-in is rate limited:** ten wrong passwords from one address in 15 minutes locks that address out for the rest of the window. Addresses are stored hashed.
+
+**Deletes are soft** and admin-only. A deleted lead keeps blocking re-import and stays on the exclusion list, so deleting can never cause a company to be pitched twice.
+
+**Do-not-contact is enforced on the server.** Once a lead says stop, no outreach can be logged against it, whatever the client sends.
 
 ---
 
@@ -142,30 +147,25 @@ Worth understanding before you widen access.
 
 ```
 app/
-  page.tsx              list (server: auth check)
-  lead-list.tsx         list UI
+  (crm)/                pages inside the app shell: Today, leads, pipeline, tasks,
+                        activity, reports, ruled-out, settings
+  components/           shell, design-system pieces, log-activity dialog, api client
   login/page.tsx        sign in
-  leads/[id]/           detail + edit; id "new" creates
-  api/
-    session/            sign in, sign out, whoami
-    leads/              list, create
-    leads/[id]/         read, update, delete
-    leads/batch/        token-authenticated bulk ingest
-    activity/           recent activity
+  api/                  JSON endpoints (see docs/CRM.md); /api/leads keeps its old shape
 lib/
-  db.ts                 Neon client, parameterized query helper
-  auth.ts               password check, signed sessions, ingest token
-  leads.ts              validation and data access
-  constants.ts          roster, statuses, writable-field whitelist
-  http.ts               response helpers
+  crm.ts                stages, events, tasks: the pipeline rules (pure, unit-tested)
+  events.ts             records an event and applies its effects in one transaction
+  leads.ts tasks.ts exclusions.ts settings.ts dashboard.ts reports.ts
+  db.ts                 Neon (or local PGlite) client; refuses an unmigrated database
+  auth.ts roles.ts      sessions, ingest token, server-side permissions
+  constants.ts keys.ts  roster, field whitelist, duplicate keys
 db/
-  schema.sql            tables and indexes
-  batch-001.json        seed data
-scripts/
-  setup.mjs             create tables
-  seed.mjs              load Batch 001
+  schema.sql            base tables
+  migrations/           numbered, applied only by `npm run db:migrate -- --apply`
+scripts/                migrate, backup, local test database, Contact Log reconciliation
+tests/                  rule tests and end-to-end API scenarios
 ```
 
 ## Scope
 
-Deliberately small: a leads table, a UI to work it, and one ingest endpoint. The hard part of outbound is research quality, not lead storage — that lives in the `aster-lead-engine` skill. If someone asks for email sequencing or an inbox integration, that is a different product and it should not grow out of this one.
+A CRM for a small studio, not an enterprise one. Research quality, qualification and templates live in the `aster-lead-engine` skill. The CRM holds the data and the discipline: who owns what, what happened, what's next. It drafts nothing and sends nothing on its own.

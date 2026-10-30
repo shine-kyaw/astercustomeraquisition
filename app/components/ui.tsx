@@ -160,6 +160,14 @@ export function fmtDateTime(v: string | null | undefined): string {
   return d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+/**
+ * When a timeline entry happened. Entries logged for an earlier day without a time carry
+ * `date_only`, and showing them with a clock time would invent precision nobody recorded.
+ */
+export function fmtWhen(occurredAt: string | null | undefined, meta?: unknown): string {
+  return (meta as { date_only?: boolean } | null)?.date_only ? fmtDate(occurredAt) : fmtDateTime(occurredAt)
+}
+
 /** "2h ago", "3d ago". */
 export function ago(v: string | null | undefined): string {
   if (!v) return '—'

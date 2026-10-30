@@ -1,0 +1,6 @@
+import Handoff from './handoff'
+
+export default async function HandoffPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  return <Handoff id={id} />
+}

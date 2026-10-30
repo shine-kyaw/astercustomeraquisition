@@ -1,0 +1,22 @@
+.trow{flex-wrap:wrap;row-gap:6px}
+.trow .tick{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border-strong);background:transparent;color:transparent;display:grid;place-items:center;cursor:pointer;flex:none;padding:0}
+.trow .tick svg{width:12px;height:12px}
+.trow button.tick:hover{border-color:var(--green);color:var(--green)}
+.trow.finished .tick{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+.trow.finished .t{text-decoration:line-through;color:var(--dim)}
+.trow .meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-size:12px;color:var(--dim);margin-top:2px;white-space:normal;overflow:visible}
+.trow .meta a{color:var(--muted)}
+.trow .meta a:hover{color:var(--gold)}
+.trow .acts{display:flex;align-items:center;gap:6px;flex:none}
+.tsec-h{display:flex;align-items:center;gap:8px}
+.tsec-h .n{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;font-weight:500}
+.tsec-h.hot h3,.tsec-h.hot .n{color:var(--red)}
+.tpick{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--r-sm);margin-top:6px;overflow:hidden}
+.tpick button{background:transparent;border:0;border-bottom:1px solid var(--border);color:var(--text);text-align:left;padding:8px 12px;font-size:13px;cursor:pointer}
+.tpick button:last-child{border-bottom:0}
+.tpick button:hover{background:var(--surface-2)}
+.vh{position:absolute;left:-9999px}
+@media (max-width:640px){
+  .trow .acts{width:100%;padding-left:34px;flex-wrap:wrap}
+  .trow{padding-left:14px;padding-right:14px}
+}

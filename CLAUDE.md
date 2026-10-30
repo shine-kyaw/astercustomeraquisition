@@ -4,7 +4,8 @@ Context for any future Claude session picking this up.
 
 ## What this is
 
-Aster's shared lead tracker. Next.js 15 App Router, Neon Postgres, deployed on Vercel.
+Aster CRM (formerly the Lead Engine): the team's sales pipeline, from researched prospect to
+won client. Next.js 15 App Router, Neon Postgres, deployed on Vercel.
 Four runtime dependencies, no ORM, no CSS framework. Keep it that way.
 
 - Repo: `shine-kyaw/astercustomeraquisition`
@@ -61,9 +62,39 @@ a silently broken database connection.
 
 ## Database changes
 
-`db/schema.sql` uses `create table if not exists`, so it is safe to re-run. `scripts/seed.mjs`
-refuses to run when the table already has rows, so it cannot duplicate a batch or trample
-statuses someone set. Both are local operations against `DATABASE_URL`.
+`db/schema.sql` (the base tables) uses `create table if not exists` and the app still creates it
+on first use. **Everything after that is a numbered migration in `db/migrations/`, applied only
+by `npm run db:migrate -- --apply`**, which backs up every table first, runs the file in one
+transaction and checks row counts. Never make the app apply a migration on its own: Preview
+deploys have shared the production `DATABASE_URL`. When you add a migration, bump
+`REQUIRED_SCHEMA` in `lib/db.ts`; the app then refuses to serve (503 with instructions) until
+the migration has run. Migrations only add — never drop, rename or retype a column in the same
+release that stops using it. See `DEPLOY.md`.
+
+Test against a throwaway database, never production: `DATABASE_URL=pglite:./.localdb npm run
+db:local` builds a pre-migration copy with realistic shapes; then migrate it and point the app
+at it. PGlite is a devDependency, loaded by a name webpack can't see, so it never ships.
+
+## How the CRM is put together
+
+Read `docs/CRM.md` for the why. The short version:
+
+- **Stage, event, task are separate.** `lib/crm.ts` holds the rules as pure functions
+  (`planEvent`, `statusForStage`, `eventForStatus`) and is unit-tested. `lib/events.ts` turns a
+  plan into one transaction. Change behaviour in `crm.ts` and add a test.
+- **The legacy `status` must keep working both ways.** The aster-lead-engine skill reads it and
+  PATCHes it from Chrome; a status PATCH becomes the event it describes. `GET /api/leads` with
+  no query string returns every live lead in the old shape. Don't break either.
+- **Never fabricate history or metrics.** A draft is not a send; "No fit" is not contact; won is
+  not paid; money is per currency. Metric definitions live next to their queries in
+  `lib/dashboard.ts` and `lib/reports.ts` and are shown in the UI.
+- **Admin operations are checked on the server** (`lib/roles.ts`), not by hiding buttons.
+- Client components must never import `lib/leads.ts`, `lib/db.ts` or anything that does — it
+  pulls the database driver into the browser bundle. `lib/crm.ts`, `lib/constants.ts`,
+  `lib/keys.ts`, `lib/exclusion-list.ts` are client-safe.
+
+Tests: `npm test` (rules), `npm run test:api` (scenarios A–J against a local server on PGlite;
+it refuses to run against anything else).
 
 ## Conventions worth preserving
 
@@ -78,5 +109,7 @@ statuses someone set. Both are local operations against `DATABASE_URL`.
 
 ## Known gap
 
-No rate limiting on `/api/session`. Acceptable for a private URL; if it circulates, put
-Vercel's WAF in front of it, because the shared password is otherwise brute-forceable.
+Sign-in is still one shared password plus a name picked from a list, so roles stop mistakes,
+not a determined insider. Failed sign-ins are rate limited (10 per address per 15 minutes).
+Individual Google sign-in is the planned fix (docs/CRM.md §6). Until then, rotate
+`TEAM_PASSWORD` whenever someone leaves.

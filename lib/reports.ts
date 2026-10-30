@@ -142,7 +142,7 @@ export async function getReport(fromRaw?: string, toRaw?: string) {
        count(*) filter (where status = 'done' and done_at >= $1::date and done_at < ($2::date + 1))::int as completed,
        count(*) filter (where status = 'done' and done_at >= $1::date and done_at < ($2::date + 1)
                           and (due_on is null or done_at::date <= due_on))::int as on_time,
-       count(*) filter (where status = 'open' and due_on < $2::date)::int as overdue_now
+       count(*) filter (where status = 'open' and due_on < current_date and $2::date is not null)::int as overdue_now
      from tasks`,
     range
   )

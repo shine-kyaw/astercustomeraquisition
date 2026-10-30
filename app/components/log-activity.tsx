@@ -120,7 +120,13 @@ export function LogActivityDialog({
 
     setBusy(true)
     try {
-      const at = time ? new Date(`${date}T${time}`).toISOString() : undefined
+      // Today with no time means "just now". An earlier day with no time is stored at local
+      // noon and flagged, so it's shown as a date, never as a time nobody recorded.
+      const isToday = date === today()
+      const at = time
+        ? new Date(`${date}T${time}`).toISOString()
+        : isToday ? new Date().toISOString() : new Date(`${date}T12:00`).toISOString()
+      if (!time && !isToday) meta.date_only = true
       const res = await api<{ lead: Record<string, unknown> }>(`/api/leads/${lead.id}/events`, {
         body: { type, date, at, summary: summary.trim(), extRef: extRef.trim(), meta },
       })
