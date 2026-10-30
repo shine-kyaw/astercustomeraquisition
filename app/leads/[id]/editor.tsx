@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  TEAM, STATUSES, GEOS, VERIFICATION, CONFIDENCE, CHANNELS, TEMPLATES,
+  TEAM, STATUSES, GEOS, VERIFICATION, CONFIDENCE, CHANNELS, TEMPLATES, FORMER_NAMES, FORMER_MAILS,
 } from '@/lib/constants'
 
 type Field = {
@@ -76,6 +76,20 @@ const SECTIONS: { title: string; fields: Field[] }[] = [
     ],
   },
 ]
+
+/**
+ * A lead can carry a value that's no longer offered — an owner or mailbox belonging to
+ * someone who has left. Keep it in the list so the select shows the truth and saving
+ * doesn't quietly swap it for the first option.
+ */
+function withCurrent(opts: readonly string[], current: string | undefined): readonly string[] {
+  return current && !opts.includes(current) ? [...opts, current] : opts
+}
+
+function optionLabel(o: string): string {
+  if (!o) return '— none —'
+  return FORMER_NAMES.includes(o) || FORMER_MAILS.includes(o) ? `${o} (left)` : o
+}
 
 const BLANK: Record<string, string> = {
   company: '', batch: 'Batch 002', seq: '', loc: '', geo: 'us', site: '', biz: '',
@@ -174,8 +188,8 @@ export default function Editor({ id, me }: { id: string; me: string }) {
                   <label htmlFor={f.k}>{f.label}</label>
                   {f.type === 'select' ? (
                     <select id={f.k} value={form[f.k] ?? ''} onChange={(e) => set(f.k, e.target.value)}>
-                      {f.opts!.map((o) => (
-                        <option key={o} value={o}>{o || '— none —'}</option>
+                      {withCurrent(f.opts!, form[f.k]).map((o) => (
+                        <option key={o} value={o}>{optionLabel(o)}</option>
                       ))}
                     </select>
                   ) : f.type === 'area' ? (

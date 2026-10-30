@@ -1,6 +1,6 @@
 import { q, one } from './db'
 import { newId } from './auth'
-import { WRITABLE_FIELDS, ENUMS, type WritableField } from './constants'
+import { WRITABLE_FIELDS, ENUMS, FORMER_MAILS, FORMER_NAMES, type WritableField } from './constants'
 import { siteKey, companyKey } from './keys'
 
 // Re-exported so existing importers keep working. Client code must import from ./keys
@@ -25,7 +25,10 @@ const MAX_TEXT = 20000
  * and enum columns are rejected outright if they carry an unrecognised value — otherwise a
  * typo in a status silently creates a category that no filter will ever match.
  */
-export function sanitize(body: unknown): { patch: Partial<Record<WritableField, unknown>>; errors: string[] } {
+export function sanitize(
+  body: unknown,
+  before?: Record<string, unknown>
+): { patch: Partial<Record<WritableField, unknown>>; errors: string[] } {
   const patch: Partial<Record<WritableField, unknown>> = {}
   const errors: string[] = []
   if (!body || typeof body !== 'object') return { patch, errors: ['Body must be an object'] }
@@ -58,6 +61,19 @@ export function sanitize(body: unknown): { patch: Partial<Record<WritableField, 
     const allowed = ENUMS[field]
     if (allowed && s && !allowed.includes(s)) {
       errors.push(`${field} must be one of: ${allowed.join(', ')}`)
+      continue
+    }
+
+    // Someone who has left can't be given new work. A lead that already carries their
+    // name or mailbox keeps it (that's history), so an unchanged value is let through —
+    // otherwise saving any field on such a lead would fail.
+    const unchanged = before && String(before[field] ?? '') === s
+    if (!unchanged && field === 'sender' && FORMER_MAILS.includes(s.toLowerCase())) {
+      errors.push(`${s} is no longer an Aster mailbox — choose another sender`)
+      continue
+    }
+    if (!unchanged && field === 'owner' && FORMER_NAMES.includes(s)) {
+      errors.push(`${s} is no longer on the team — choose another owner`)
       continue
     }
     patch[field] = s

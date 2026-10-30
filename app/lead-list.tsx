@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { TEAM, STATUSES } from '@/lib/constants'
+import { TEAM, STATUSES, FORMER_NAMES, needsNewOwner } from '@/lib/constants'
 import { formatExclusionList } from '@/lib/exclusion-list'
 
 type Lead = Record<string, any>
@@ -11,7 +11,7 @@ type Activity = { id: number; who: string; action: string; at: string }
 
 const FILTERS = [
   ['all', 'All'], ['open', 'Not contacted'], ['active', 'In play'], ['won', 'Won'],
-  ['mine', 'Mine'], ['email', 'Email first'], ['phone', 'Phone first'],
+  ['mine', 'Mine'], ['reassign', 'Needs new owner'], ['email', 'Email first'], ['phone', 'Phone first'],
   ['us', 'US'], ['uk', 'UK'], ['tw', 'Taiwan'],
 ] as const
 
@@ -188,6 +188,7 @@ export default function LeadList({ me }: { me: string }) {
         case 'active': return !['Not sent', 'Won', 'No fit', 'Dead'].includes(l.status)
         case 'won': return l.status === 'Won'
         case 'mine': return l.owner === me
+        case 'reassign': return needsNewOwner(l)
         case 'email': return l.channel === 'email'
         case 'phone': return l.channel === 'phone'
         case 'us': case 'uk': case 'tw': return l.geo === filter
@@ -327,7 +328,10 @@ export default function LeadList({ me }: { me: string }) {
                         <span className={`pill ${l.estat === 'VERIFIED' ? 'v' : l.estat === 'UNKNOWN' ? 'u' : ''}`}>Email {l.estat}</span>
                         <span className={`pill ${l.pstat === 'VERIFIED' ? 'v' : 'u'}`}>Phone {l.pstat}</span>
                         <span className="pill geo">{String(l.geo || '').toUpperCase()}</span>
-                        {l.owner && <span className="pill own">{l.owner}</span>}
+                        {l.owner && (
+                          <span className="pill own">{l.owner}{FORMER_NAMES.includes(l.owner) ? ' (left)' : ''}</span>
+                        )}
+                        {needsNewOwner(l) && <span className="pill u">Needs a new owner</span>}
                         <span className="pill">
                           <span className="dot" style={{ background: dotColour(l.status) }} />
                           {l.status}
@@ -340,6 +344,7 @@ export default function LeadList({ me }: { me: string }) {
                         <select value={l.owner || ''} onChange={(e) => patch(l.id, { owner: e.target.value })}>
                           <option value="">unassigned</option>
                           {TEAM.map((t) => <option key={t.name}>{t.name}</option>)}
+                          {FORMER_NAMES.includes(l.owner) && <option value={l.owner}>{l.owner} (left)</option>}
                         </select>
                         <Link className="btn sm" href={`/leads/${l.id}`}>Open</Link>
                       </div>
@@ -451,7 +456,7 @@ export default function LeadList({ me }: { me: string }) {
       )}
 
       <footer>
-        <p>Live sending mailboxes: <b>shine@ · mtk@ · xiaolong@ · lucas@ astermade.com</b></p>
+        <p>Live sending mailboxes: <b>{TEAM.filter((t) => t.live).map((t) => t.mail.split('@')[0] + '@').join(' · ')} astermade.com</b></p>
         <p style={{ marginTop: 6 }}>
           Credibility to cite: <b>Power Tagun Engineering</b> (Asia General Holding) and{' '}
           <b>Kaung Thu Kha Group Co., Ltd.</b>

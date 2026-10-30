@@ -6,7 +6,7 @@
 // terminal transcript or a chat log. Claude writes the JSON file; you run this.
 //
 // The JSON file may be either a bare array of leads, or an object:
-//   { "batch": "Batch 002", "addedBy": "Victor Huang", "leads": [ ... ] }
+//   { "batch": "Batch 002", "addedBy": "Astrid", "leads": [ ... ] }
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 

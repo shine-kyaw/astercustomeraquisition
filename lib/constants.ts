@@ -3,11 +3,32 @@ export const TEAM = [
   { name: 'Myat Thit Kha', mail: 'mtk@astermade.com', live: true },
   { name: 'Xiao Long Hein', mail: 'xiaolong@astermade.com', live: true },
   { name: 'Lucas Lin', mail: 'lucas@astermade.com', live: true },
-  { name: 'Victor Huang', mail: 'victor@astermade.com', live: false },
-  { name: 'Babullee', mail: 'babullee@astermade.com', live: false },
+  { name: 'Astrid', mail: 'astrid@astermade.com', live: true },
 ] as const
 
 export const TEAM_NAMES = TEAM.map((t) => t.name) as readonly string[]
+
+/**
+ * People who have left. They can't sign in, and their mailboxes can't be chosen as a
+ * sender, but leads they owned keep the name as history — so it is still recognised and
+ * shown as "(left)" rather than silently blanked.
+ */
+export const FORMER_TEAM = [
+  { name: 'Victor Huang', mail: 'victor@astermade.com' },
+  { name: 'Babullee', mail: 'babullee@astermade.com' },
+] as const
+
+export const FORMER_NAMES = FORMER_TEAM.map((t) => t.name) as readonly string[]
+export const FORMER_MAILS = FORMER_TEAM.map((t) => t.mail) as readonly string[]
+
+/** Statuses after which a lead needs no further work, so a departed owner doesn't matter. */
+export const CLOSED_STATUSES = ['Won', 'No fit', 'Dead'] as const
+
+/** An open lead still owned by someone who has left: it needs a new owner. */
+export function needsNewOwner(lead: { owner?: unknown; status?: unknown }): boolean {
+  return FORMER_NAMES.includes(String(lead.owner ?? '')) &&
+    !(CLOSED_STATUSES as readonly string[]).includes(String(lead.status ?? ''))
+}
 
 const MAX_NAME = 60
 
@@ -33,6 +54,10 @@ export function signInNameError(name: string): string | null {
   if (/[\u0000-\u001f\u007f<>]/.test(name)) return 'That name has characters we can’t use'
   if (TEAM_NAMES.some((t) => t.toLowerCase() === name.toLowerCase())) {
     return 'That’s a team name — pick it from the list instead'
+  }
+  // Without this, someone who has left could still sign in as themselves under "Other".
+  if (FORMER_NAMES.some((t) => t.toLowerCase() === name.toLowerCase())) {
+    return 'That person is no longer on the team'
   }
   return null
 }

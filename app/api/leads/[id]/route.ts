@@ -25,7 +25,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     if (!before) return fail('No lead with that id', 404)
 
     const body = await req.json().catch(() => null)
-    const { patch, errors } = sanitize(body)
+    const { patch, errors } = sanitize(body, before)
     if (errors.length) return fail('Some fields were rejected', 400, { errors })
 
     const changed = describeChanges(before, patch)
