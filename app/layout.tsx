@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Aster — Lead Engine',
-  description: 'Aster internal prospect tracker.',
+  title: 'Aster CRM',
+  description: 'Aster’s sales pipeline: leads, follow-ups, deals.',
   robots: { index: false, follow: false },
 }
 

@@ -49,7 +49,7 @@ export default function LoginPage() {
         <div className="mark">
           Aster<span>.</span>
         </div>
-        <p className="sub">Lead Engine. Pick your name so edits are attributed to you.</p>
+        <p className="sub">CRM. Pick your name so your work is attributed to you.</p>
 
         {error && <div className="err">{error}</div>}
 

@@ -10,7 +10,12 @@
     "lint": "next lint",
     "db:setup": "node scripts/setup.mjs",
     "db:seed": "node scripts/seed.mjs",
-    "push-batch": "node --env-file=.env.local scripts/push-batch.mjs"
+    "push-batch": "node --env-file=.env.local scripts/push-batch.mjs",
+    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "db:backup": "node --env-file=.env.local scripts/backup.mjs",
+    "db:local": "node scripts/local-db.mjs",
+    "test": "node --test tests/crm.test.ts",
+    "test:api": "node --test tests/api.test.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
